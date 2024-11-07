@@ -6,8 +6,7 @@
   <body>
     <h1>Edit {{.Title}}</h1>
     <form action="/save/{{.Title}}" method="post">
-      <textarea name="body" rows="20" cols="80">        {{.Body}}</textarea
-      ><br />
+      <textarea name="body" rows="20" cols="80">{{.Body}}</textarea><br />
       <input type="submit" value="Save" />
     </form>
   </body>
