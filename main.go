@@ -1,8 +1,4 @@
-// Copyright 2010 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
-//go:build ignore
+// main.go
 
 package main
 
@@ -10,27 +6,45 @@ import (
 	"html/template"
 	"log"
 	"net/http"
-	"os"
 	"regexp"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 type Page struct {
-	Title string
-	Body  []byte
+	ID    uint   `gorm:"primaryKey"`
+	Title string `gorm:"uniqueIndex"`
+	Body  string
+}
+
+var db *gorm.DB
+
+// Initialize the database
+func initDB() {
+	var err error
+	db, err = gorm.Open(sqlite.Open("pages.db"), &gorm.Config{})
+	if err != nil {
+		log.Fatal("Failed to connect to database:", err)
+	}
+	// Migrate the schema
+	err = db.AutoMigrate(&Page{})
+	if err != nil {
+		log.Fatal("Failed to migrate database:", err)
+	}
 }
 
 func (p *Page) save() error {
-	filename := p.Title + ".txt"
-	return os.WriteFile(filename, p.Body, 0600)
+	return db.Save(p).Error
 }
 
 func loadPage(title string) (*Page, error) {
-	filename := title + ".txt"
-	body, err := os.ReadFile(filename)
-	if err != nil {
-		return nil, err
+	var page Page
+	result := db.First(&page, "title = ?", title)
+	if result.Error != nil {
+		return nil, result.Error
 	}
-	return &Page{Title: title, Body: body}, nil
+	return &page, nil
 }
 
 func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
@@ -52,8 +66,8 @@ func editHandler(w http.ResponseWriter, r *http.Request, title string) {
 
 func saveHandler(w http.ResponseWriter, r *http.Request, title string) {
 	body := r.FormValue("body")
-	p := &Page{Title: title, Body: []byte(body)}
-	err := p.save()
+	page := &Page{Title: title, Body: body}
+	err := page.save()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -84,9 +98,11 @@ func makeHandler(fn func(http.ResponseWriter, *http.Request, string)) http.Handl
 }
 
 func main() {
+	initDB()
 	http.HandleFunc("/view/", makeHandler(viewHandler))
 	http.HandleFunc("/edit/", makeHandler(editHandler))
 	http.HandleFunc("/save/", makeHandler(saveHandler))
 
+	log.Println("Server running on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
